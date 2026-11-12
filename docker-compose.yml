@@ -1,0 +1,14 @@
+services:
+  channel-os:
+    build: .
+    container_name: qucheng-channel-os
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

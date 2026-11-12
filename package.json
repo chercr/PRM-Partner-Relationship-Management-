@@ -1,0 +1,44 @@
+{
+  "name": "qucheng-channel-os",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n API,WEB -c magenta,cyan \"tsx watch server/index.ts\" \"vite --host 0.0.0.0\"",
+    "build": "tsc -b && vite build && npm run build:server",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node24 --format=cjs --packages=external --outfile=dist-server/index.cjs",
+    "start": "node dist-server/index.cjs",
+    "start:source": "tsx server/index.ts",
+    "test": "node --import tsx --test --test-isolation=none server/business.test.ts server/excel.test.ts server/opportunity.test.ts",
+    "test:e2e": "node scripts/e2e-check.mjs",
+    "test:auth": "node scripts/auth-e2e.mjs",
+    "test:opportunity": "node scripts/opportunity-e2e.mjs",
+    "test:contact": "node scripts/contact-e2e.mjs",
+    "test:visual": "node scripts/visual-check.mjs",
+    "test:production": "node scripts/production-smoke.mjs"
+  },
+  "dependencies": {
+    "cors": "latest",
+    "express": "latest",
+    "xlsx": "latest"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/cors": "latest",
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "esbuild": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-router-dom": "latest",
+    "recharts": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}

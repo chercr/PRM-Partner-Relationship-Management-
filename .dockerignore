@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-server
+*.tsbuildinfo
+data
+.npm-cache
+.playwright
+.git
+*.log
+.env
