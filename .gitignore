@@ -12,3 +12,5 @@ data/backups/
 .github_known_hosts
 渠道伙伴评估表.xlsx
 渠道客户管理系统需求说明.md
+website/
+scripts/website-*.mjs

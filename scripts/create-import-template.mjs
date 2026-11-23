@@ -1,4 +1,5 @@
 import XLSX from 'xlsx';
+import { mkdirSync } from 'node:fs';
 import { DIMENSIONS } from '../src/business';
 import { parsePartnerWorkbook } from '../src/excel';
 
@@ -28,7 +29,8 @@ const evaluationSheet = XLSX.utils.aoa_to_sheet(evaluations);
 evaluationSheet['!cols'] = evaluations[0].map((header) => ({ wch: Math.max(14, String(header).length * 2 + 3) }));
 XLSX.utils.book_append_sheet(workbook, evaluationSheet, '评估表');
 XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(standards), '评分标准');
-const file = 'website/assets/partner-import-template.xlsx';
+mkdirSync('public/templates', { recursive: true });
+const file = 'public/templates/partner-import-template.xlsx';
 XLSX.writeFile(workbook, file);
 const contents = XLSX.readFile(file);
 const buffer = XLSX.write(contents, { type: 'buffer', bookType: 'xlsx' });

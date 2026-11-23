@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, FileSpreadsheet, LoaderCircle, UploadCloud } from 'lucide-react';
+import { ArrowRight, Check, Download, FileSpreadsheet, LoaderCircle, UploadCloud } from 'lucide-react';
 import { Modal } from './UI';
 import { parsePartnerWorkbook } from '../excel';
 import { TYPE_META } from '../business';
@@ -49,6 +49,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
       {fileName && <div className="selected-file"><FileSpreadsheet size={16} />{fileName}</div>}
       {error && <div className="form-error">{error}</div>}
       <div className="import-notes"><strong>导入前会为你自动处理</strong><div><span><Check size={14} />按公司名去重</span><span><Check size={14} />识别四种伙伴类型</span><span><Check size={14} />同步六维评分</span><span><Check size={14} />保留来源与核验信息</span></div></div>
+      <a className="template-download" href="/templates/partner-import-template.xlsx" download><Download size={14} />下载空白 Excel 导入模板</a>
     </div> : <div className="import-preview">
       <div className="import-summary"><div><FileSpreadsheet size={20} /><span><b>{fileName}</b><small>识别到 {rows.length} 条有效伙伴线索</small></span></div><span className="badge badge-neutral">重复 {rows.length - selectable.length}</span><span className="badge badge-purple">可导入 {selectable.length}</span></div>
       {error && <div className="form-error">{error}</div>}

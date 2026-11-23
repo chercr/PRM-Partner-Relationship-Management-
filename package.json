@@ -16,8 +16,6 @@
     "test:contact": "node scripts/contact-e2e.mjs",
     "test:visual": "node scripts/visual-check.mjs",
     "test:production": "node scripts/production-smoke.mjs",
-    "preview:website": "node scripts/website-preview.mjs",
-    "test:website": "node scripts/website-check.mjs",
     "test:multiuser": "node scripts/multiuser-e2e.mjs",
     "test:ai": "node scripts/ai-e2e.mjs"
   },
