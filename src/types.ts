@@ -23,6 +23,8 @@ export interface FollowUp {
   summary: string;
   tags: string[];
   nextFollowupDate?: string;
+  createdBy?: string;
+  createdByName?: string;
   createdAt: string;
 }
 
@@ -46,6 +48,7 @@ export interface Partner {
   note: string;
   scores: ScoreSet;
   followUps: FollowUp[];
+  createdBy?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -98,6 +101,7 @@ export interface Contact {
   employmentStatus: EmploymentStatus;
   notes: string;
   careers: ContactCareer[];
+  createdBy?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -136,6 +140,7 @@ export interface Opportunity {
   stage: OpportunityStage;
   sourceFollowupId?: string;
   sourceContactId?: string;
+  createdBy?: string;
   createdAt: string;
   convertedAt?: string;
   updatedAt: string;
@@ -152,10 +157,64 @@ export interface OpportunityDraft {
   sourceContactId?: string;
 }
 
+export type UserRole = 'admin' | 'member';
+export type UserStatus = 'active' | 'disabled';
+
 export interface AuthUser {
   id: string;
   username: string;
   displayName: string;
+  role: UserRole;
+  status: UserStatus;
+  email: string;
+  title: string;
+  phone: string;
+  bio: string;
+  avatarColor: string;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface RegisterDraft {
+  username: string;
+  displayName: string;
+  email: string;
+  password: string;
+}
+
+export interface ProfileDraft {
+  displayName: string;
+  email: string;
+  title: string;
+  phone: string;
+  bio: string;
+  avatarColor: string;
+}
+
+export type AiAction = 'create_partner' | 'add_followup' | 'create_contact' | 'create_opportunity';
+
+export interface AiProposal {
+  id: string;
+  action: AiAction;
+  summary: string;
+  data: Record<string, unknown>;
+  status: 'pending' | 'executed' | 'cancelled';
+  resultId?: string;
+}
+
+export interface AiMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  proposal?: AiProposal;
+  createdAt: string;
+}
+
+export interface AiConfigView {
+  configured: boolean;
+  baseUrl: string;
+  model: string;
+  apiKeyMask: string;
 }
 
 export interface ToastMessage {

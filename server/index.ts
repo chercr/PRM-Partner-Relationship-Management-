@@ -3,7 +3,8 @@ import cors from 'cors';
 import path from 'node:path';
 import { existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { addFollowup, backupDatabase, createContact, createOpportunity, createPartner, deleteContact, deleteOpportunity, deletePartner, getContact, getOpportunity, getPartner, importPartners, listContacts, listOpportunities, listPartners, moveContact, resetBusinessData, saveScores, updateContact, updateOpportunity, updatePartner } from './db';
-import { changePassword, clearSessionCookie, createSession, ensureAdmin, loginBlocked, recordLogin, removeSession, requireAuth, setSessionCookie, verifyLogin, verifyUserPassword } from './auth';
+import { changePassword, clearSessionCookie, createSession, deleteUser, ensureAdmin, listUsers, loginBlocked, recordLogin, registerUser, removeSession, requireAdmin, requireAuth, setSessionCookie, setUserRole, setUserStatus, updateProfile, verifyLogin, verifyUserPassword } from './auth';
+import { chatWithAi, cancelAiProposal, clearAiMessages, deleteAiConfig, executeAiProposal, getAiConfig, getAiMessages, saveAiConfig, testAiConfig } from './ai';
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
@@ -27,6 +28,14 @@ app.post('/api/auth/login', (req, res) => {
   setSessionCookie(res, createSession(user.id));
   res.json({ user });
 });
+app.post('/api/auth/register', (req, res) => {
+  const key = req.ip || req.socket.remoteAddress || 'local';
+  if (loginBlocked(key)) return res.status(429).json({ error: '注册尝试过多，请稍后重试' });
+  const user = registerUser(req.body);
+  recordLogin(key, true);
+  setSessionCookie(res, createSession(user.id));
+  res.status(201).json({ user });
+});
 app.get('/api/auth/me', requireAuth, (_req, res) => res.json({ user: res.locals.user }));
 app.post('/api/auth/logout', requireAuth, (_req, res) => {
   removeSession(res.locals.sessionToken);
@@ -39,7 +48,12 @@ app.post('/api/auth/password', (req, res) => {
   changePassword(res.locals.user.id, res.locals.sessionToken, String(req.body.currentPassword || ''), String(req.body.newPassword || ''));
   res.json({ ok: true });
 });
-app.post('/api/admin/reset-data', (req, res) => {
+app.put('/api/profile', (req, res) => res.json({ user: updateProfile(res.locals.user.id, req.body) }));
+app.get('/api/users', requireAdmin, (_req, res) => res.json(listUsers()));
+app.put('/api/users/:id/role', requireAdmin, (req, res) => res.json({ user: setUserRole(String(req.params.id), req.body.role, res.locals.user.id) }));
+app.put('/api/users/:id/status', requireAdmin, (req, res) => res.json({ user: setUserStatus(String(req.params.id), req.body.status, res.locals.user.id) }));
+app.delete('/api/users/:id', requireAdmin, (req, res) => { deleteUser(String(req.params.id), res.locals.user.id); res.json({ ok: true }); });
+app.post('/api/admin/reset-data', requireAdmin, (req, res) => {
   if (!verifyUserPassword(res.locals.user.id, String(req.body.password || ''))) return res.status(400).json({ error: '管理员密码不正确，未清除任何数据' });
   if (req.body.confirmation !== '清空') return res.status(400).json({ error: '请输入「清空」确认操作' });
   resetBusinessData();
@@ -53,20 +67,29 @@ app.post('/api/admin/reset-data', (req, res) => {
   }
   res.json({ ok: true, partners: 0, opportunities: 0, contacts: 0 });
 });
+app.get('/api/ai/config', (_req, res) => res.json(getAiConfig()));
+app.put('/api/ai/config', requireAdmin, (req, res) => res.json(saveAiConfig(String(req.body.baseUrl || ''), String(req.body.model || ''), String(req.body.apiKey || ''))));
+app.post('/api/ai/config/test', requireAdmin, async (_req, res) => { await testAiConfig(); res.json({ ok: true }); });
+app.delete('/api/ai/config', requireAdmin, (_req, res) => { deleteAiConfig(); res.json({ ok: true }); });
+app.get('/api/ai/messages', (req, res) => res.json(getAiMessages(res.locals.user.id)));
+app.post('/api/ai/chat', async (req, res) => { await chatWithAi(res.locals.user.id, String(req.body.message || '')); res.json({ messages: getAiMessages(res.locals.user.id) }); });
+app.post('/api/ai/proposals/:id/execute', (req, res) => { executeAiProposal(res.locals.user.id, String(req.params.id)); res.json({ messages: getAiMessages(res.locals.user.id) }); });
+app.post('/api/ai/proposals/:id/cancel', (req, res) => { cancelAiProposal(res.locals.user.id, String(req.params.id)); res.json({ messages: getAiMessages(res.locals.user.id) }); });
+app.delete('/api/ai/messages', (req, res) => { clearAiMessages(res.locals.user.id); res.json({ ok: true }); });
 app.get('/api/partners', (_req, res) => res.json(listPartners()));
 app.get('/api/partners/:id', (req, res) => {
   const partner = getPartner(req.params.id);
   if (!partner) return res.status(404).json({ error: '伙伴不存在' });
   res.json(partner);
 });
-app.post('/api/partners', (req, res) => res.status(201).json(createPartner(req.body)));
+app.post('/api/partners', (req, res) => res.status(201).json(createPartner(req.body, res.locals.user.id)));
 app.put('/api/partners/:id', (req, res) => res.json(updatePartner(req.params.id, req.body)));
 app.delete('/api/partners/:id', (req, res) => { deletePartner(req.params.id); res.json({ ok: true }); });
 app.put('/api/partners/:id/scores', (req, res) => res.json(saveScores(req.params.id, req.body.scores || {})));
-app.post('/api/partners/:id/followups', (req, res) => res.status(201).json(addFollowup(req.params.id, req.body)));
+app.post('/api/partners/:id/followups', (req, res) => res.status(201).json(addFollowup(req.params.id, req.body, res.locals.user.id)));
 app.post('/api/import', (req, res) => {
   if (!Array.isArray(req.body.partners)) return res.status(400).json({ error: '导入数据格式不正确' });
-  res.json(importPartners(req.body.partners));
+  res.json(importPartners(req.body.partners, res.locals.user.id));
 });
 app.post('/api/backup', (_req, res) => res.status(201).json({ file: backupDatabase() }));
 app.get('/api/opportunities', (_req, res) => res.json(listOpportunities()));
@@ -75,7 +98,7 @@ app.get('/api/opportunities/:id', (req, res) => {
   if (!opportunity) return res.status(404).json({ error: '记录不存在' });
   res.json(opportunity);
 });
-app.post('/api/opportunities', (req, res) => res.status(201).json(createOpportunity(req.body)));
+app.post('/api/opportunities', (req, res) => res.status(201).json(createOpportunity(req.body, res.locals.user.id)));
 app.put('/api/opportunities/:id', (req, res) => res.json(updateOpportunity(req.params.id, req.body)));
 app.delete('/api/opportunities/:id', (req, res) => { deleteOpportunity(req.params.id); res.json({ ok: true }); });
 app.get('/api/contacts', (_req, res) => res.json(listContacts()));
@@ -84,7 +107,7 @@ app.get('/api/contacts/:id', (req, res) => {
   if (!contact) return res.status(404).json({ error: '联系人不存在' });
   res.json(contact);
 });
-app.post('/api/contacts', (req, res) => res.status(201).json(createContact(req.body)));
+app.post('/api/contacts', (req, res) => res.status(201).json(createContact(req.body, res.locals.user.id)));
 app.put('/api/contacts/:id', (req, res) => res.json(updateContact(req.params.id, req.body)));
 app.post('/api/contacts/:id/move', (req, res) => res.json(moveContact(req.params.id, req.body)));
 app.delete('/api/contacts/:id', (req, res) => { deleteContact(req.params.id); res.json({ ok: true }); });

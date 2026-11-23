@@ -29,6 +29,7 @@ db.exec(`
     status TEXT NOT NULL DEFAULT '未接触',
     sign_date TEXT,
     note TEXT NOT NULL DEFAULT '',
+    created_by TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -48,6 +49,7 @@ db.exec(`
     summary TEXT NOT NULL,
     tags TEXT NOT NULL DEFAULT '[]',
     next_followup_date TEXT,
+    created_by TEXT,
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_followups_partner ON follow_ups(partner_id);
@@ -62,6 +64,7 @@ db.exec(`
     stage TEXT NOT NULL DEFAULT 'LEAD' CHECK(stage IN ('LEAD', 'OPPORTUNITY')),
     source_followup_id TEXT REFERENCES follow_ups(id) ON DELETE SET NULL,
     source_contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL,
+    created_by TEXT,
     created_at TEXT NOT NULL,
     converted_at TEXT,
     updated_at TEXT NOT NULL
@@ -81,6 +84,7 @@ db.exec(`
     is_primary INTEGER NOT NULL DEFAULT 0,
     employment_status TEXT NOT NULL DEFAULT '在职',
     notes TEXT NOT NULL DEFAULT '',
+    created_by TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -102,6 +106,14 @@ db.exec(`
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     display_name TEXT NOT NULL DEFAULT '系统管理员',
+    role TEXT NOT NULL DEFAULT 'member',
+    status TEXT NOT NULL DEFAULT 'active',
+    email TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    bio TEXT NOT NULL DEFAULT '',
+    avatar_color TEXT NOT NULL DEFAULT '#6c63d9',
+    last_login_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -117,6 +129,33 @@ db.exec(`
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS ai_settings (
+    id INTEGER PRIMARY KEY CHECK(id=1),
+    base_url TEXT NOT NULL,
+    model TEXT NOT NULL,
+    api_key_encrypted TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ai_proposals (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    action TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    result_id TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ai_messages (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    proposal_id TEXT REFERENCES ai_proposals(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_messages_user ON ai_messages(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_ai_proposals_user ON ai_proposals(user_id, created_at);
 `);
 
 function ensureColumn(table: string, column: string): void {
@@ -125,27 +164,29 @@ function ensureColumn(table: string, column: string): void {
 }
 ensureColumn('follow_ups', 'contact_id');
 ensureColumn('opportunities', 'source_contact_id');
+['role', 'status', 'email', 'title', 'phone', 'bio', 'avatar_color', 'last_login_at'].forEach((column) => ensureColumn('users', column));
+['partners', 'follow_ups', 'opportunities', 'contacts'].forEach((table) => ensureColumn(table, 'created_by'));
 
 type PartnerRow = {
   id: string; name: string; type: Partner['type']; region: string; scale: string;
   business_desc: string; decision_maker: string; source_name: string; source_url: string;
   contact: string; verify_status: Partner['verifyStatus']; verify_note: string; batch: Partner['batch'];
   priority_order: number; status: Partner['status']; sign_date?: string; note: string;
-  created_at: string; updated_at: string;
+  created_by?: string; created_at: string; updated_at: string;
 };
 type FollowupRow = {
   id: string; partner_id: string; contact_id?: string; date: string; channel: FollowUp['channel']; summary: string;
-  tags: string; next_followup_date?: string; created_at: string;
+  tags: string; next_followup_date?: string; created_by?: string; created_by_name?: string; created_at: string;
 };
 
 const PARTNER_COLUMNS = `id, name, type, region, scale, business_desc, decision_maker, source_name,
-  source_url, contact, verify_status, verify_note, batch, priority_order, status, sign_date, note, created_at, updated_at`;
+  source_url, contact, verify_status, verify_note, batch, priority_order, status, sign_date, note, created_by, created_at, updated_at`;
 
 function mapFollowup(row: FollowupRow): FollowUp {
   return {
     id: row.id, partnerId: row.partner_id, contactId: row.contact_id || undefined, date: row.date, channel: row.channel,
     summary: row.summary, tags: JSON.parse(row.tags || '[]'), nextFollowupDate: row.next_followup_date || undefined,
-    createdAt: row.created_at,
+    createdBy: row.created_by || undefined, createdByName: row.created_by_name || undefined, createdAt: row.created_at,
   };
 }
 
@@ -153,13 +194,13 @@ function hydrate(row: PartnerRow): Partner {
   const scores: ScoreSet = {};
   const scoreRows = db.prepare('SELECT dimension, score FROM scores WHERE partner_id = ?').all(row.id) as unknown as Array<{ dimension: keyof ScoreSet; score: number }>;
   scoreRows.forEach((score) => { scores[score.dimension] = score.score; });
-  const followupRows = db.prepare('SELECT * FROM follow_ups WHERE partner_id = ? ORDER BY date DESC, created_at DESC').all(row.id) as unknown as FollowupRow[];
+  const followupRows = db.prepare("SELECT follow_ups.*, (SELECT display_name FROM users WHERE users.id=follow_ups.created_by) AS created_by_name FROM follow_ups WHERE partner_id = ? ORDER BY date DESC, created_at DESC").all(row.id) as unknown as FollowupRow[];
   return {
     id: row.id, name: row.name, type: row.type, region: row.region, scale: row.scale,
     businessDesc: row.business_desc, decisionMaker: row.decision_maker, sourceName: row.source_name,
     sourceUrl: row.source_url, contact: row.contact, verifyStatus: row.verify_status, verifyNote: row.verify_note,
     batch: row.batch, priorityOrder: row.priority_order, status: row.status, signDate: row.sign_date || undefined,
-    note: row.note, scores, followUps: followupRows.map(mapFollowup), createdAt: row.created_at, updatedAt: row.updated_at,
+    note: row.note, scores, followUps: followupRows.map(mapFollowup), createdBy: row.created_by || undefined, createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
 
@@ -173,19 +214,19 @@ export function getPartner(id: string): Partner | null {
   return row ? hydrate(row) : null;
 }
 
-export function createPartner(draft: PartnerDraft): Partner {
+export function createPartner(draft: PartnerDraft, actorId?: string): Partner {
   if (!draft.name?.trim()) throw new Error('公司名称不能为空');
   if (!['AGENT', 'SI', 'IPD', 'EXPERT'].includes(draft.type)) throw new Error('请选择正确的伙伴类型');
   const id = randomUUID();
   const now = new Date().toISOString();
   db.prepare(`INSERT INTO partners (
     id, name, type, region, scale, business_desc, decision_maker, source_name, source_url, contact,
-    verify_status, verify_note, batch, priority_order, status, sign_date, note, created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    verify_status, verify_note, batch, priority_order, status, sign_date, note, created_by, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, draft.name.trim(), draft.type, draft.region || '', draft.scale || '', draft.businessDesc || '',
     draft.decisionMaker || '', draft.sourceName || '', draft.sourceUrl || '', draft.contact || '',
     draft.verifyStatus || '待核实', draft.verifyNote || '', draft.batch || '蓄水池', draft.priorityOrder ?? 999,
-    draft.status || '未接触', draft.signDate || null, draft.note || '', now, now,
+    draft.status || '未接触', draft.signDate || null, draft.note || '', actorId || null, now, now,
   );
   if (draft.scores) writeScores(id, draft.scores);
   return getPartner(id)!;
@@ -231,7 +272,7 @@ export function deletePartner(id: string): void {
   db.prepare('DELETE FROM partners WHERE id=?').run(id);
 }
 
-export function addFollowup(id: string, draft: Omit<FollowUp, 'id' | 'partnerId' | 'createdAt'>): Partner {
+export function addFollowup(id: string, draft: Omit<FollowUp, 'id' | 'partnerId' | 'createdAt' | 'createdBy' | 'createdByName'>, actorId?: string): Partner {
   const partner = getPartner(id);
   if (!partner) throw new Error('伙伴不存在或已被删除');
   if (!draft.summary?.trim()) throw new Error('请填写本次跟进内容');
@@ -241,10 +282,10 @@ export function addFollowup(id: string, draft: Omit<FollowUp, 'id' | 'partnerId'
     if (!contact || contact.partnerId !== id) throw new Error('所选对接人不属于当前伙伴');
   }
   const followupId = randomUUID();
-  db.prepare(`INSERT INTO follow_ups(id, partner_id, contact_id, date, channel, summary, tags, next_followup_date, created_at)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+  db.prepare(`INSERT INTO follow_ups(id, partner_id, contact_id, date, channel, summary, tags, next_followup_date, created_by, created_at)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     followupId, id, draft.contactId || null, draft.date, draft.channel, draft.summary.trim(), JSON.stringify(draft.tags || []),
-    draft.nextFollowupDate || null, new Date().toISOString(),
+    draft.nextFollowupDate || null, actorId || null, new Date().toISOString(),
   );
   const activates = (draft.tags || []).some((tag) => ['报备线索', '联合拜访', '方案写入', '写入方案'].includes(tag));
   if (activates && ['已签约', '已暂停'].includes(partner.status)) {
@@ -255,7 +296,7 @@ export function addFollowup(id: string, draft: Omit<FollowUp, 'id' | 'partnerId'
   return getPartner(id)!;
 }
 
-export function importPartners(drafts: PartnerDraft[]): { inserted: number; skipped: number } {
+export function importPartners(drafts: PartnerDraft[], actorId?: string): { inserted: number; skipped: number } {
   let inserted = 0;
   let skipped = 0;
   db.exec('BEGIN IMMEDIATE');
@@ -263,7 +304,7 @@ export function importPartners(drafts: PartnerDraft[]): { inserted: number; skip
     drafts.forEach((draft) => {
       const exists = db.prepare('SELECT id FROM partners WHERE name=?').get(draft.name.trim());
       if (exists) skipped += 1;
-      else { createPartner(draft); inserted += 1; }
+      else { createPartner(draft, actorId); inserted += 1; }
     });
     db.exec('COMMIT');
   } catch (error) {
@@ -276,7 +317,7 @@ export function importPartners(drafts: PartnerDraft[]): { inserted: number; skip
 type ContactRow = {
   id: string; partner_id: string; name: string; title: string; department: string;
   phone: string; wechat: string; email: string; role: Contact['role']; is_primary: number;
-  employment_status: Contact['employmentStatus']; notes: string; created_at: string; updated_at: string;
+  employment_status: Contact['employmentStatus']; notes: string; created_by?: string; created_at: string; updated_at: string;
 };
 type CareerRow = {
   id: string; contact_id: string; partner_id: string; title: string; start_date?: string;
@@ -293,7 +334,7 @@ function hydrateContact(row: ContactRow): Contact {
     id: row.id, partnerId: row.partner_id, name: row.name, title: row.title, department: row.department,
     phone: row.phone, wechat: row.wechat, email: row.email, role: row.role, isPrimary: Boolean(row.is_primary),
     employmentStatus: row.employment_status, notes: row.notes, careers: careers.map(mapCareer),
-    createdAt: row.created_at, updatedAt: row.updated_at,
+    createdBy: row.created_by || undefined, createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
 
@@ -312,7 +353,7 @@ function validateContact(draft: ContactDraft): void {
   if (!draft.name?.trim()) throw new Error('请填写联系人姓名');
 }
 
-export function createContact(draft: ContactDraft): Contact {
+export function createContact(draft: ContactDraft, actorId?: string): Contact {
   validateContact(draft);
   const id = randomUUID();
   const now = new Date().toISOString();
@@ -320,11 +361,11 @@ export function createContact(draft: ContactDraft): Contact {
   db.exec('BEGIN IMMEDIATE');
   try {
     if (isPrimary) db.prepare('UPDATE contacts SET is_primary=0 WHERE partner_id=?').run(draft.partnerId);
-    db.prepare(`INSERT INTO contacts(id, partner_id, name, title, department, phone, wechat, email, role, is_primary, employment_status, notes, created_at, updated_at)
-      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    db.prepare(`INSERT INTO contacts(id, partner_id, name, title, department, phone, wechat, email, role, is_primary, employment_status, notes, created_by, created_at, updated_at)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       id, draft.partnerId, draft.name.trim(), draft.title || '', draft.department || '', draft.phone || '',
       draft.wechat || '', draft.email || '', draft.role || '普通联系人', isPrimary ? 1 : 0,
-      draft.employmentStatus || '在职', draft.notes || '', now, now,
+      draft.employmentStatus || '在职', draft.notes || '', actorId || null, now, now,
     );
     db.prepare('INSERT INTO contact_careers(id, contact_id, partner_id, title, start_date, end_date, note, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)').run(
       randomUUID(), id, draft.partnerId, draft.title || '', draft.startDate || now.slice(0, 10),
@@ -397,14 +438,14 @@ export function deleteContact(id: string): void {
 type OpportunityRow = {
   id: string; partner_id: string; customer_name: string; name: string; demand: string;
   expected_amount: number | null; stage: Opportunity['stage']; source_followup_id?: string; source_contact_id?: string;
-  created_at: string; converted_at?: string; updated_at: string;
+  created_by?: string; created_at: string; converted_at?: string; updated_at: string;
 };
 
 function mapOpportunity(row: OpportunityRow): Opportunity {
   return {
     id: row.id, partnerId: row.partner_id, customerName: row.customer_name, name: row.name,
     demand: row.demand, expectedAmount: row.expected_amount, stage: row.stage,
-    sourceFollowupId: row.source_followup_id || undefined, sourceContactId: row.source_contact_id || undefined, createdAt: row.created_at,
+    sourceFollowupId: row.source_followup_id || undefined, sourceContactId: row.source_contact_id || undefined, createdBy: row.created_by || undefined, createdAt: row.created_at,
     convertedAt: row.converted_at || undefined, updatedAt: row.updated_at,
   };
 }
@@ -431,14 +472,14 @@ export function getOpportunity(id: string): Opportunity | null {
   return row ? mapOpportunity(row) : null;
 }
 
-export function createOpportunity(draft: OpportunityDraft): Opportunity {
+export function createOpportunity(draft: OpportunityDraft, actorId?: string): Opportunity {
   validateOpportunity(draft);
   const id = randomUUID();
   const now = new Date().toISOString();
-  db.prepare(`INSERT INTO opportunities(id, partner_id, customer_name, name, demand, expected_amount, stage, source_followup_id, source_contact_id, created_at, converted_at, updated_at)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+  db.prepare(`INSERT INTO opportunities(id, partner_id, customer_name, name, demand, expected_amount, stage, source_followup_id, source_contact_id, created_by, created_at, converted_at, updated_at)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, draft.partnerId, draft.customerName.trim(), draft.name.trim(), draft.demand?.trim() || '',
-    draft.expectedAmount ?? null, draft.stage || 'LEAD', draft.sourceFollowupId || null, draft.sourceContactId || null, now,
+    draft.expectedAmount ?? null, draft.stage || 'LEAD', draft.sourceFollowupId || null, draft.sourceContactId || null, actorId || null, now,
     draft.stage === 'OPPORTUNITY' ? now : null, now,
   );
   return getOpportunity(id)!;
@@ -469,6 +510,17 @@ export function updateOpportunity(id: string, draft: Partial<OpportunityDraft>):
 
 export function deleteOpportunity(id: string): void {
   db.prepare('DELETE FROM opportunities WHERE id=?').run(id);
+}
+
+export function findPartnerIdByName(name: string): string {
+  const clean = name.trim();
+  if (!clean) throw new Error('请提供伙伴名称');
+  const exact = db.prepare('SELECT id FROM partners WHERE name=? COLLATE NOCASE').get(clean) as { id: string } | undefined;
+  if (exact) return exact.id;
+  const matches = db.prepare('SELECT id FROM partners WHERE name LIKE ?').all(`%${clean}%`) as unknown as Array<{ id: string }>;
+  if (matches.length === 1) return matches[0].id;
+  if (matches.length > 1) throw new Error(`「${clean}」匹配到多家伙伴，请使用完整公司名称`);
+  throw new Error(`没有找到伙伴「${clean}」，请先创建伙伴档案`);
 }
 
 export function resetBusinessData(): void {

@@ -9,6 +9,7 @@ import Playbook from './pages/Playbook';
 import Settings from './pages/Settings';
 import Opportunities from './pages/Opportunities';
 import Contacts from './pages/Contacts';
+import Profile from './pages/Profile';
 
 export default function App() {
   return <Routes>
@@ -22,6 +23,7 @@ export default function App() {
       <Route path="analytics" element={<Analytics />} />
       <Route path="playbook" element={<Playbook />} />
       <Route path="settings" element={<Settings />} />
+      <Route path="profile" element={<Profile />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Route>
   </Routes>;

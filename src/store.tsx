@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from './api';
-import type { AuthUser, Contact, ContactDraft, ContactMoveDraft, FollowUp, Opportunity, OpportunityDraft, OpportunityStage, Partner, PartnerDraft, ScoreSet, ToastMessage } from './types';
+import type { AuthUser, Contact, ContactDraft, ContactMoveDraft, FollowUp, Opportunity, OpportunityDraft, OpportunityStage, Partner, PartnerDraft, ProfileDraft, RegisterDraft, ScoreSet, ToastMessage } from './types';
 import { ToastStack } from './components/UI';
 import LoginPage from './pages/LoginPage';
 
@@ -18,6 +18,7 @@ type AppContextValue = {
   fontSize: FontSize;
   setFontSize: (size: FontSize) => void;
   logout: () => Promise<void>;
+  saveProfile: (draft: ProfileDraft) => Promise<AuthUser>;
   refresh: () => Promise<void>;
   createPartner: (draft: PartnerDraft) => Promise<Partner>;
   updatePartner: (id: string, draft: Partial<PartnerDraft>) => Promise<Partner>;
@@ -101,6 +102,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     await refresh();
   }, [refresh]);
+  const handleRegister = useCallback(async (draft: RegisterDraft) => {
+    const result = await api.register(draft);
+    setUser(result.user);
+    setLoading(true);
+    await refresh();
+  }, [refresh]);
   const setFontSize = useCallback((size: FontSize) => setFontSizeState(size), []);
   const value = useMemo<AppContextValue>(() => ({
     partners, opportunities, contacts, user, loading, toasts, refresh, toast, fontSize, setFontSize,
@@ -108,6 +115,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try { await api.logout(); }
       finally { setUser(null); setPartners([]); setOpportunities([]); setContacts([]); }
     },
+    saveProfile: async (draft) => { const result = await api.updateProfile(draft); setUser(result.user); return result.user; },
     createPartner: async (draft) => { const partner = await api.createPartner(draft); await refresh(); return partner; },
     updatePartner: async (id, draft) => { const partner = await api.updatePartner(id, draft); setPartners((items) => items.map((item) => item.id === id ? partner : item)); return partner; },
     deletePartner: async (id) => { await api.deletePartner(id); setPartners((items) => items.filter((item) => item.id !== id)); setOpportunities((items) => items.filter((item) => item.partnerId !== id)); setContacts((items) => items.filter((item) => item.partnerId !== id)); },
@@ -135,7 +143,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }), [partners, opportunities, contacts, user, loading, toasts, refresh, toast, fontSize, setFontSize]);
 
   if (!authChecked) return <div className="auth-loading"><span className="loader" /><p>正在打开渠道工作区…</p></div>;
-  if (!user) return <LoginPage onLogin={handleLogin} />;
+  if (!user) return <LoginPage onLogin={handleLogin} onRegister={handleRegister} />;
 
   return <AppContext.Provider value={value}>
     {children}

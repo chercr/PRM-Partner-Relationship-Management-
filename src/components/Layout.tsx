@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BadgeDollarSign, Bell, BookOpenText, CalendarCheck2, ChartNoAxesCombined, ChevronDown, CircleHelp, ContactRound, Download, LayoutDashboard, LogOut, Menu, Plus, Search, Settings2, Sparkles, Target, UsersRound, X } from 'lucide-react';
+import { BadgeDollarSign, Bell, BookOpenText, CalendarCheck2, ChartNoAxesCombined, ChevronDown, CircleHelp, ContactRound, Download, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2, Sparkles, Target, UsersRound, X } from 'lucide-react';
 import { useApp } from '../store';
 import { dateAtOffset, daysBetween, getActivation, getNextFollowup } from '../business';
 import { exportPartnersCsv } from '../excel';
+import AiAssistant from './AiAssistant';
 
 const navItems = [
   { path: '/', label: '工作台', icon: LayoutDashboard, end: true },
@@ -20,6 +21,7 @@ export default function Layout() {
   const [search, setSearch] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('channel-sidebar-collapsed') === 'true');
   const navigate = useNavigate();
   const location = useLocation();
   const searchInput = useRef<HTMLInputElement>(null);
@@ -32,6 +34,7 @@ export default function Layout() {
     window.addEventListener('keydown', focusSearch);
     return () => window.removeEventListener('keydown', focusSearch);
   }, []);
+  useEffect(() => { localStorage.setItem('channel-sidebar-collapsed', String(collapsed)); }, [collapsed]);
   const today = dateAtOffset(0);
   const reminderCount = useMemo(() => partners.filter((partner) => {
     const next = getNextFollowup(partner);
@@ -45,21 +48,21 @@ export default function Layout() {
     navigate(`/partners?search=${encodeURIComponent(search)}`);
   }
 
-  return <div className="app-shell">
+  return <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
     {mobileOpen && <button className="mobile-overlay" onClick={() => setMobileOpen(false)} aria-label="关闭菜单" />}
     <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
-      <div className="brand"><span className="brand-mark"><svg viewBox="0 0 32 32"><path d="M8 9h12a4 4 0 0 1 0 8h-7a4 4 0 0 0 0 8h11" /><circle cx="8" cy="9" r="2" /><circle cx="24" cy="25" r="2" /></svg></span><div><strong>渠成</strong><span>CHANNEL OS</span></div><button className="mobile-close" onClick={() => setMobileOpen(false)}><X size={18} /></button></div>
-      <button className="workspace-switch" onClick={() => toast('当前为单租户工作区', '通用渠道工作区 · 管理员账号密码认证', 'info')}><span className="workspace-icon">C</span><span><b>渠道工作区</b><small>伙伴与商机管理</small></span><ChevronDown size={14} /></button>
+      <div className="brand"><span className="brand-mark"><svg viewBox="0 0 32 32"><path d="M8 9h12a4 4 0 0 1 0 8h-7a4 4 0 0 0 0 8h11" /><circle cx="8" cy="9" r="2" /><circle cx="24" cy="25" r="2" /></svg></span><div><strong>渠成</strong><span>CHANNEL OS</span></div><button className="sidebar-collapse" onClick={() => setCollapsed(!collapsed)} title={collapsed ? '展开导航' : '收起为纯图标'} aria-label={collapsed ? '展开导航' : '收起导航'}>{collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button><button className="mobile-close" onClick={() => setMobileOpen(false)}><X size={18} /></button></div>
+      <button className="workspace-switch" onClick={() => toast('当前为单租户工作区', '单租户多用户 · 共享业务数据 · 账号密码认证', 'info')}><span className="workspace-icon">C</span><span><b>渠道工作区</b><small>伙伴与商机管理</small></span><ChevronDown size={14} /></button>
       <nav className="main-nav">
         <span className="nav-caption">工作空间</span>
-        {navItems.map((item) => <NavLink key={item.path} to={item.path} end={item.end} onClick={() => setMobileOpen(false)} className={({ isActive }) => isActive ? 'active' : ''}><item.icon size={18} strokeWidth={1.8} /><span>{item.label}</span>{item.path === '/followups' && reminderCount > 0 && <em>{reminderCount}</em>}</NavLink>)}
+        {navItems.map((item) => <NavLink key={item.path} to={item.path} end={item.end} data-label={item.label} title={collapsed ? item.label : undefined} onClick={() => setMobileOpen(false)} className={({ isActive }) => isActive ? 'active' : ''}><item.icon size={18} strokeWidth={1.8} /><span>{item.label}</span>{item.path === '/followups' && reminderCount > 0 && <em>{reminderCount}</em>}</NavLink>)}
         <span className="nav-caption nav-caption-second">管理</span>
-        <NavLink to="/settings" onClick={() => setMobileOpen(false)} className={({ isActive }) => isActive ? 'active' : ''}><Settings2 size={18} strokeWidth={1.8} /><span>系统设置</span></NavLink>
+        <NavLink to="/settings" data-label="系统设置" title={collapsed ? '系统设置' : undefined} onClick={() => setMobileOpen(false)} className={({ isActive }) => isActive ? 'active' : ''}><Settings2 size={18} strokeWidth={1.8} /><span>系统设置</span></NavLink>
       </nav>
       <div className="sidebar-bottom">
         <div className="goal-card"><div className="goal-card-top"><span><Target size={15} />本月签约目标</span><b>{signed}/8</b></div><div className="goal-progress"><i style={{ width: `${Math.min(100, signed / 8 * 100)}%` }} /></div><p>保持节奏，向目标再进一步</p></div>
         <button className="help-link" onClick={() => toast('快速上手', '先导入候选名单，再完成六维评估；每次沟通后记得写跟进并设置下次日期。', 'info')}><CircleHelp size={17} /><span>使用帮助与反馈</span><span className="help-key">?</span></button>
-        <div className="user-card"><span className="user-avatar">{user?.displayName.slice(0, 1) || '管'}<i /></span><div><b>{user?.displayName || '管理员'}</b><span>{user?.username || 'admin'} · 管理员</span></div><button className="user-logout" title="退出登录" onClick={() => { void logout(); }}><LogOut size={16} /></button></div>
+        <div className="user-card"><button className="user-avatar" style={{ background: user?.avatarColor }} onClick={() => navigate('/profile')} title="个人中心">{user?.displayName.slice(0, 1) || '用'}<i /></button><div><b>{user?.displayName || '用户'}</b><span>{user?.username || 'admin'} · {user?.role === 'admin' ? '管理员' : '成员'}</span></div><button className="user-logout" title="退出登录" onClick={() => { void logout(); }}><LogOut size={16} /></button></div>
       </div>
     </aside>
     <div className="main-shell">
@@ -77,6 +80,7 @@ export default function Layout() {
       </header>
       <main className="page-container" key={location.pathname}><Outlet /></main>
       <footer className="app-footer"><span><Sparkles size={13} />让每一次合作，都有迹可循</span><span>数据保存在本地工作区 · 每日自动备份</span></footer>
+      <AiAssistant />
     </div>
   </div>;
 }

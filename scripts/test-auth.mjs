@@ -1,5 +1,6 @@
 export async function loginForTest(page, base = 'http://127.0.0.1:3001') {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.login-form, .app-shell', { timeout: 15000 });
   const login = page.locator('.login-form');
   if (await login.count()) {
     await page.locator('input[autocomplete="username"]').fill(process.env.ADMIN_USERNAME || 'admin');

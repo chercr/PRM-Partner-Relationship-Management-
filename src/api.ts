@@ -1,4 +1,4 @@
-import type { AuthUser, Contact, ContactDraft, ContactMoveDraft, FollowUp, Opportunity, OpportunityDraft, Partner, PartnerDraft, ScoreSet } from './types';
+import type { AiConfigView, AiMessage, AuthUser, Contact, ContactDraft, ContactMoveDraft, FollowUp, Opportunity, OpportunityDraft, Partner, PartnerDraft, ProfileDraft, RegisterDraft, ScoreSet, UserRole, UserStatus } from './types';
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -15,9 +15,24 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 export const api = {
   me: () => request<{ user: AuthUser }>('/api/auth/me'),
   login: (username: string, password: string) => request<{ user: AuthUser }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  register: (draft: RegisterDraft) => request<{ user: AuthUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify(draft) }),
+  updateProfile: (draft: ProfileDraft) => request<{ user: AuthUser }>('/api/profile', { method: 'PUT', body: JSON.stringify(draft) }),
+  users: () => request<AuthUser[]>('/api/users'),
+  updateUserRole: (id: string, role: UserRole) => request<{ user: AuthUser }>(`/api/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) }),
+  updateUserStatus: (id: string, status: UserStatus) => request<{ user: AuthUser }>(`/api/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  deleteUser: (id: string) => request<{ ok: boolean }>(`/api/users/${id}`, { method: 'DELETE' }),
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   changePassword: (currentPassword: string, newPassword: string) => request<{ ok: boolean }>('/api/auth/password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }),
   resetData: (password: string, confirmation: string) => request<{ ok: boolean }>('/api/admin/reset-data', { method: 'POST', body: JSON.stringify({ password, confirmation }) }),
+  aiConfig: () => request<AiConfigView>('/api/ai/config'),
+  saveAiConfig: (baseUrl: string, model: string, apiKey: string) => request<AiConfigView>('/api/ai/config', { method: 'PUT', body: JSON.stringify({ baseUrl, model, apiKey }) }),
+  testAiConfig: () => request<{ ok: boolean }>('/api/ai/config/test', { method: 'POST' }),
+  deleteAiConfig: () => request<{ ok: boolean }>('/api/ai/config', { method: 'DELETE' }),
+  aiMessages: () => request<AiMessage[]>('/api/ai/messages'),
+  chatAi: (message: string) => request<{ messages: AiMessage[] }>('/api/ai/chat', { method: 'POST', body: JSON.stringify({ message }) }),
+  executeAiProposal: (id: string) => request<{ messages: AiMessage[] }>(`/api/ai/proposals/${id}/execute`, { method: 'POST' }),
+  cancelAiProposal: (id: string) => request<{ messages: AiMessage[] }>(`/api/ai/proposals/${id}/cancel`, { method: 'POST' }),
+  clearAiMessages: () => request<{ ok: boolean }>('/api/ai/messages', { method: 'DELETE' }),
   partners: () => request<Partner[]>('/api/partners'),
   createPartner: (draft: PartnerDraft) => request<Partner>('/api/partners', { method: 'POST', body: JSON.stringify(draft) }),
   updatePartner: (id: string, draft: Partial<PartnerDraft>) => request<Partner>(`/api/partners/${id}`, { method: 'PUT', body: JSON.stringify(draft) }),

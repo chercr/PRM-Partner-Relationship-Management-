@@ -4,6 +4,7 @@ dist/
 dist-server/
 *.tsbuildinfo
 data/*.db*
+data/*.key
 data/backups/
 *.log
 .playwright/
